@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PromptPay QR Code Generator</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -143,8 +142,8 @@
             display: none;
             text-align: center;
             margin-top: 30px;
-            padding: 15px;
-            background: #e5e9ff;
+            padding: 30px 20px;
+            background: #f8f9ff;
             border-radius: 20px;
             animation: fadeIn 0.5s;
         }
@@ -154,28 +153,23 @@
             to { opacity: 1; transform: scale(1); }
         }
 
-        #qrcode {
-            CONTAIN-INTRINSIC-BLOCK-SIZE: AUTO 100PX;
+        .qr-wrapper {
             display: flex;
             justify-content: center;
             align-items: center;
-            padding: 10px;
+            padding: 20px;
             background: white;
             border-radius: 15px;
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            margin: 0 auto;
             max-width: 100%;
         }
 
-        #qrcode img {
-            max-width: 100% !important;
-            height: auto !important;
-            width: 100% !important;
-        }
-
-        #qrcode canvas {
-            max-width: 100% !important;
-            height: auto !important;
-            width: 100% !important;
+        #qrImage {
+            max-width: 100%;
+            height: auto;
+            display: block;
+            border-radius: 8px;
         }
 
         .qr-info {
@@ -205,6 +199,25 @@
             text-align: center;
         }
 
+        .download-btn {
+            margin-top: 20px;
+            padding: 15px 30px;
+            background: linear-gradient(135deg, #4ECDC4, #44A08D);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 4px 15px rgba(78, 205, 196, 0.4);
+        }
+
+        .download-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(78, 205, 196, 0.5);
+        }
+
         @media (max-width: 480px) {
             .container {
                 padding: 25px;
@@ -222,6 +235,10 @@
                 padding: 18px;
                 font-size: 16px;
             }
+
+            .qr-container {
+                padding: 20px 15px;
+            }
         }
     </style>
 </head>
@@ -234,7 +251,7 @@
             <label>ประเภทบัญชี</label>
             <select id="accountType">
                 <option value="phone">เบอร์โทรศัพท์</option>
-                <option value="id" selected>เลขบัตรประชาชน</option>
+                <option value="id">เลขบัตรประชาชน</option>
             </select>
 
             <label>หมายเลขบัญชี</label>
@@ -261,66 +278,19 @@
         <div class="error" id="error"></div>
 
         <div class="qr-container" id="qrContainer">
-            <div id="qrcode"></div>
+            <div class="qr-wrapper">
+                <img id="qrImage" alt="PromptPay QR Code">
+            </div>
             <div class="qr-info" id="qrInfo"></div>
+            <button class="download-btn" onclick="downloadQR()">💾 ดาวน์โหลด QR Code</button>
         </div>
     </div>
 
     <script>
-        let qrcodeInstance = null;
+        let currentQRUrl = '';
 
         function setAmount(value) {
             document.getElementById('amount').value = value;
-        }
-
-        function crc16(data) {
-            let crc = 0xFFFF;
-            for (let i = 0; i < data.length; i++) {
-                crc ^= data.charCodeAt(i) << 8;
-                for (let j = 0; j < 8; j++) {
-                    if (crc & 0x8000) {
-                        crc = (crc << 1) ^ 0x1021;
-                    } else {
-                        crc = crc << 1;
-                    }
-                }
-            }
-            crc &= 0xFFFF;
-            return crc.toString(16).toUpperCase().padStart(4, '0');
-        }
-
-        function generatePromptPayQR(accountNumber, amount = null) {
-            // Format account number
-            let formattedAccount = accountNumber.replace(/\D/g, '');
-            
-            // Build EMV QR Code
-            let qrData = '';
-            qrData += '000201'; // Payload Format Indicator
-            qrData += '010212'; // Point of Initiation Method (12 = QR can be used multiple times)
-            
-            // Merchant Account Information
-            let merchantInfo = '';
-            merchantInfo += '0016' + 'A000000677010111'; // AID
-            merchantInfo += '01' + (formattedAccount.length < 10 ? '13' : '15');
-            merchantInfo += '00' + formattedAccount.length + formattedAccount;
-            
-            qrData += '29' + merchantInfo.length.toString().padStart(2, '0') + merchantInfo;
-            
-            qrData += '5802TH'; // Country Code
-            
-            // Transaction Amount
-            if (amount && amount > 0) {
-                let amountStr = parseFloat(amount).toFixed(2);
-                qrData += '54' + amountStr.length.toString().padStart(2, '0') + amountStr;
-            }
-            
-            qrData += '6304'; // CRC placeholder
-            
-            // Calculate and append CRC
-            let checksum = crc16(qrData);
-            qrData += checksum;
-            
-            return qrData;
         }
 
         function generateQR() {
@@ -358,22 +328,22 @@
                 return;
             }
 
-            // Generate PromptPay QR
-            const qrString = generatePromptPayQR(cleanNumber, amount);
+            // สร้าง URL สำหรับ PromptPay QR Code
+            let qrUrl = `https://promptpay.io/${cleanNumber}`;
             
-            // Clear previous QR code
-            const qrcodeDiv = document.getElementById('qrcode');
-            qrcodeDiv.innerHTML = '';
+            // เพิ่มจำนวนเงินถ้ามีการระบุ
+            if (amount && amount > 0) {
+                qrUrl += `/${amount.toFixed(2)}`;
+            }
             
-            // Generate new QR code
-            new QRCode(qrcodeDiv, {
-                text: qrString,
-                width: 250,
-                height: 250,
-                colorDark: '#000000',
-                colorLight: '#ffffff',
-                correctLevel: QRCode.CorrectLevel.L
-            });
+            // เพิ่ม .png เพื่อให้ได้รูปภาพ
+            qrUrl += '.png';
+            
+            currentQRUrl = qrUrl;
+            
+            // แสดง QR Code
+            const qrImage = document.getElementById('qrImage');
+            qrImage.src = qrUrl;
             
             // Show QR container
             const qrContainer = document.getElementById('qrContainer');
@@ -394,6 +364,18 @@
             
             // Scroll to QR code
             qrContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+
+        function downloadQR() {
+            if (!currentQRUrl) return;
+            
+            // สร้างลิงก์ดาวน์โหลด
+            const link = document.createElement('a');
+            link.href = currentQRUrl;
+            link.download = 'promptpay-qr-code.png';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
         }
 
         // Allow Enter key to generate QR

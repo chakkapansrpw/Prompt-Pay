@@ -1,259 +1,393 @@
-import React, { useState, useEffect } from 'react';
-import { Smartphone, CreditCard, QrCode, Settings } from 'lucide-react';
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PromptPay QR Code Generator</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
 
-// ฟังก์ชันสร้าง CRC16 สำหรับ PromptPay
-function crc16(data) {
-  let crc = 0xFFFF;
-  for (let i = 0; i < data.length; i++) {
-    crc ^= data.charCodeAt(i) << 8;
-    for (let j = 0; j < 8; j++) {
-      if (crc & 0x8000) {
-        crc = (crc << 1) ^ 0x1021;
-      } else {
-        crc = crc << 1;
-      }
-    }
-  }
-  return (crc & 0xFFFF).toString(16).toUpperCase().padStart(4, '0');
-}
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
 
-// ฟังก์ชันสร้าง PromptPay Payload
-function generatePromptPayQR(id, amount = null) {
-  const formatID = (id) => {
-    id = id.replace(/[^0-9]/g, '');
-    if (id.length === 13) return `0066${id}`;
-    if (id.length === 10) return `0066${id}`;
-    return id;
-  };
+        .container {
+            background: white;
+            border-radius: 30px;
+            padding: 40px;
+            max-width: 500px;
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
 
-  const formatAmount = (amt) => {
-    return parseFloat(amt).toFixed(2);
-  };
+        h1 {
+            text-align: center;
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 2em;
+        }
 
-  let payload = '';
-  payload += '000201'; // Payload Format Indicator
-  payload += '010212'; // Point of Initiation Method (12 = QR is static with amount)
-  
-  // Merchant Account Information
-  const formattedID = formatID(id);
-  const aidTag = `0016A000000677010111${formattedID.length.toString().padStart(2, '0')}${formattedID}`;
-  payload += `29${aidTag.length.toString().padStart(2, '0')}${aidTag}`;
-  
-  payload += '5802TH'; // Country Code
-  
-  if (amount && parseFloat(amount) > 0) {
-    const amtStr = formatAmount(amount);
-    payload += `54${amtStr.length.toString().padStart(2, '0')}${amtStr}`;
-  }
-  
-  payload += '6304'; // CRC placeholder
-  const checksum = crc16(payload);
-  payload += checksum;
-  
-  return payload;
-}
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 0.9em;
+        }
 
-export default function PromptPayQRGenerator() {
-  const [idType, setIdType] = useState('citizen'); // 'citizen' or 'phone'
-  const [idNumber, setIdNumber] = useState('');
-  const [amount, setAmount] = useState('');
-  const [qrData, setQrData] = useState('');
-  const [showSettings, setShowSettings] = useState(false);
+        .settings-section {
+            background: #f8f9ff;
+            padding: 20px;
+            border-radius: 15px;
+            margin-bottom: 25px;
+        }
 
-  const quickAmounts = [20, 50, 100, 200, 500, 1000, 2000, 5000];
+        label {
+            display: block;
+            color: #333;
+            font-weight: 600;
+            margin-bottom: 8px;
+            font-size: 0.95em;
+        }
 
-  useEffect(() => {
-    if (idNumber) {
-      generateQR(amount);
-    }
-  }, [idNumber, amount]);
+        input, select {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 12px;
+            font-size: 16px;
+            transition: all 0.3s;
+            margin-bottom: 15px;
+        }
 
-  const generateQR = (amt) => {
-    if (!idNumber) return;
-    const payload = generatePromptPayQR(idNumber, amt);
-    
-    // สร้าง QR Code URL (ใช้ API ฟรี)
-    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(payload)}`;
-    setQrData(qrUrl);
-  };
+        input:focus, select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
 
-  const handleQuickAmount = (amt) => {
-    setAmount(amt.toString());
-  };
+        .amount-section {
+            margin-bottom: 25px;
+        }
 
-  const handleAmountChange = (e) => {
-    const value = e.target.value.replace(/[^0-9.]/g, '');
-    setAmount(value);
-  };
+        .quick-amounts {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            margin-bottom: 15px;
+        }
 
-  const formatIDDisplay = (value) => {
-    const cleaned = value.replace(/[^0-9]/g, '');
-    if (idType === 'citizen' && cleaned.length <= 13) {
-      return cleaned.replace(/(\d{1})(\d{4})(\d{5})(\d{2})(\d{1})/, '$1-$2-$3-$4-$5');
-    } else if (idType === 'phone' && cleaned.length <= 10) {
-      return cleaned.replace(/(\d{3})(\d{3})(\d{4})/, '$1-$2-$3');
-    }
-    return cleaned;
-  };
+        .amount-btn {
+            padding: 20px;
+            border: none;
+            border-radius: 15px;
+            font-size: 18px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s;
+            color: white;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
 
-  const handleIDChange = (e) => {
-    const value = e.target.value.replace(/[^0-9]/g, '');
-    const maxLength = idType === 'citizen' ? 13 : 10;
-    if (value.length <= maxLength) {
-      setIdNumber(value);
-    }
-  };
+        .amount-btn:nth-child(1) { background: linear-gradient(135deg, #FF6B9D, #FE8E5B); }
+        .amount-btn:nth-child(2) { background: linear-gradient(135deg, #FFA500, #FF6347); }
+        .amount-btn:nth-child(3) { background: linear-gradient(135deg, #4ECDC4, #44A08D); }
+        .amount-btn:nth-child(4) { background: linear-gradient(135deg, #667eea, #764ba2); }
+        .amount-btn:nth-child(5) { background: linear-gradient(135deg, #F093FB, #F5576C); }
+        .amount-btn:nth-child(6) { background: linear-gradient(135deg, #4facfe, #00f2fe); }
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-500 via-pink-500 to-orange-400 p-4">
-      <div className="max-w-4xl mx-auto">
-        {/* Header */}
-        <div className="text-center mb-8 pt-8">
-          <div className="flex justify-center items-center gap-3 mb-4">
-            <QrCode className="w-12 h-12 text-white" />
-            <h1 className="text-4xl font-bold text-white">PromptPay QR</h1>
-          </div>
-          <p className="text-white text-lg">สร้าง QR Code พร้อมเพย์ง่ายๆ ในคลิกเดียว</p>
+        .amount-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .amount-btn:active {
+            transform: translateY(0);
+        }
+
+        .generate-btn {
+            width: 100%;
+            padding: 18px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            border-radius: 15px;
+            font-size: 20px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+            margin-top: 10px;
+        }
+
+        .generate-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.5);
+        }
+
+        .generate-btn:active {
+            transform: translateY(0);
+        }
+
+        .qr-container {
+            display: none;
+            text-align: center;
+            margin-top: 30px;
+            padding: 30px;
+            background: #f8f9ff;
+            border-radius: 20px;
+            animation: fadeIn 0.5s;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.9); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        #qrcode {
+            display: inline-block;
+            padding: 20px;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .qr-info {
+            margin-top: 20px;
+            padding: 15px;
+            background: white;
+            border-radius: 12px;
+            font-size: 0.95em;
+        }
+
+        .qr-info p {
+            margin: 8px 0;
+            color: #555;
+        }
+
+        .qr-info strong {
+            color: #667eea;
+        }
+
+        .error {
+            color: #ff4757;
+            background: #ffebee;
+            padding: 12px;
+            border-radius: 10px;
+            margin-top: 15px;
+            display: none;
+            text-align: center;
+        }
+
+        @media (max-width: 480px) {
+            .container {
+                padding: 25px;
+            }
+
+            h1 {
+                font-size: 1.6em;
+            }
+
+            .quick-amounts {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .amount-btn {
+                padding: 18px;
+                font-size: 16px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>💳 PromptPay QR</h1>
+        <p class="subtitle">สร้าง QR Code สำหรับรับเงิน</p>
+
+        <div class="settings-section">
+            <label>ประเภทบัญชี</label>
+            <select id="accountType">
+                <option value="phone">เบอร์โทรศัพท์</option>
+                <option value="id">เลขบัตรประชาชน</option>
+            </select>
+
+            <label>หมายเลขบัญชี</label>
+            <input type="text" id="accountNumber" placeholder="กรอกเบอร์โทรหรือเลขบัตรประชาชน">
         </div>
 
-        {/* Settings Toggle */}
-        <div className="flex justify-center mb-6">
-          <button
-            onClick={() => setShowSettings(!showSettings)}
-            className="bg-white/20 backdrop-blur-sm text-white px-6 py-3 rounded-full font-semibold hover:bg-white/30 transition-all flex items-center gap-2"
-          >
-            <Settings className="w-5 h-5" />
-            ตั้งค่าบัญชี
-          </button>
+        <div class="amount-section">
+            <label>เลือกจำนวนเงินด่วน</label>
+            <div class="quick-amounts">
+                <button class="amount-btn" onclick="setAmount(20)">20 ฿</button>
+                <button class="amount-btn" onclick="setAmount(50)">50 ฿</button>
+                <button class="amount-btn" onclick="setAmount(100)">100 ฿</button>
+                <button class="amount-btn" onclick="setAmount(200)">200 ฿</button>
+                <button class="amount-btn" onclick="setAmount(500)">500 ฿</button>
+                <button class="amount-btn" onclick="setAmount(1000)">1,000 ฿</button>
+            </div>
+
+            <label>หรือกำหนดจำนวนเองที่นี่</label>
+            <input type="number" id="amount" placeholder="ใส่จำนวนเงิน (บาท)" step="0.01" min="0">
         </div>
 
-        {/* Settings Panel */}
-        {showSettings && (
-          <div className="bg-white rounded-3xl shadow-2xl p-8 mb-6 animate-in">
-            <h2 className="text-2xl font-bold text-gray-800 mb-6">ข้อมูลบัญชีพร้อมเพย์</h2>
-            
-            {/* ID Type Selection */}
-            <div className="grid grid-cols-2 gap-4 mb-6">
-              <button
-                onClick={() => {
-                  setIdType('citizen');
-                  setIdNumber('');
-                }}
-                className={`p-6 rounded-2xl font-semibold text-lg transition-all ${
-                  idType === 'citizen'
-                    ? 'bg-gradient-to-r from-blue-500 to-purple-500 text-white shadow-lg scale-105'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-              >
-                <CreditCard className="w-8 h-8 mx-auto mb-2" />
-                เลขบัตรประชาชน
-              </button>
-              <button
-                onClick={() => {
-                  setIdType('phone');
-                  setIdNumber('');
-                }}
-                className={`p-6 rounded-2xl font-semibold text-lg transition-all ${
-                  idType === 'phone'
-                    ? 'bg-gradient-to-r from-green-500 to-teal-500 text-white shadow-lg scale-105'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-              >
-                <Smartphone className="w-8 h-8 mx-auto mb-2" />
-                เบอร์โทรศัพท์
-              </button>
-            </div>
+        <button class="generate-btn" onclick="generateQR()">🎯 สร้าง QR Code</button>
 
-            {/* ID Input */}
-            <div>
-              <label className="block text-gray-700 font-semibold mb-3 text-lg">
-                {idType === 'citizen' ? 'เลขบัตรประชาชน 13 หัก' : 'เบอร์โทรศัพท์ 10 หลัก'}
-              </label>
-              <input
-                type="text"
-                value={formatIDDisplay(idNumber)}
-                onChange={handleIDChange}
-                placeholder={idType === 'citizen' ? '0-0000-00000-00-0' : '000-000-0000'}
-                className="w-full px-6 py-4 text-2xl text-center border-4 border-gray-300 rounded-2xl focus:border-purple-500 focus:outline-none font-mono"
-              />
-              <p className="text-sm text-gray-500 mt-2 text-center">
-                {idType === 'citizen' 
-                  ? `ใส่ไปแล้ว ${idNumber.length}/13 หลัก`
-                  : `ใส่ไปแล้ว ${idNumber.length}/10 หลัก`}
-              </p>
-            </div>
-          </div>
-        )}
+        <div class="error" id="error"></div>
 
-        {/* Main Content */}
-        {idNumber && (
-          <div className="bg-white rounded-3xl shadow-2xl p-8">
-            {/* Amount Input */}
-            <div className="mb-8">
-              <label className="block text-gray-700 font-bold mb-4 text-2xl text-center">
-                ระบุจำนวนเงิน (บาท)
-              </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  value={amount}
-                  onChange={handleAmountChange}
-                  placeholder="0.00"
-                  className="w-full px-6 py-6 text-5xl text-center border-4 border-gray-300 rounded-3xl focus:border-pink-500 focus:outline-none font-bold text-pink-600"
-                />
-                <span className="absolute right-8 top-1/2 transform -translate-y-1/2 text-3xl text-gray-400 font-bold">
-                  ฿
-                </span>
-              </div>
-            </div>
-
-            {/* Quick Amount Buttons */}
-            <div className="grid grid-cols-4 gap-3 mb-8">
-              {quickAmounts.map((amt) => (
-                <button
-                  key={amt}
-                  onClick={() => handleQuickAmount(amt)}
-                  className="bg-gradient-to-r from-purple-400 to-pink-400 text-white py-4 px-4 rounded-2xl font-bold text-xl hover:from-purple-500 hover:to-pink-500 transition-all hover:scale-105 shadow-lg"
-                >
-                  {amt}฿
-                </button>
-              ))}
-            </div>
-
-            {/* QR Code Display */}
-            {qrData && (
-              <div className="text-center">
-                <div className="bg-gradient-to-br from-blue-50 to-purple-50 p-8 rounded-3xl inline-block shadow-inner">
-                  <img
-                    src={qrData}
-                    alt="PromptPay QR Code"
-                    className="w-80 h-80 mx-auto bg-white p-4 rounded-2xl shadow-lg"
-                  />
-                </div>
-                <div className="mt-6 p-6 bg-gradient-to-r from-green-50 to-teal-50 rounded-2xl">
-                  <p className="text-gray-600 font-semibold text-lg">ยอดโอน</p>
-                  <p className="text-5xl font-bold text-green-600 mt-2">
-                    {amount ? `${parseFloat(amount).toFixed(2)} ฿` : 'ไม่ระบุยอด'}
-                  </p>
-                  {!amount && (
-                    <p className="text-sm text-gray-500 mt-2">ผู้โอนสามารถระบุยอดเองได้</p>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Initial State */}
-        {!idNumber && (
-          <div className="bg-white/10 backdrop-blur-sm rounded-3xl p-12 text-center">
-            <QrCode className="w-24 h-24 text-white/50 mx-auto mb-4" />
-            <p className="text-white text-xl font-semibold">
-              กรุณากดปุ่ม "ตั้งค่าบัญชี" เพื่อเริ่มต้นใช้งาน
-            </p>
-          </div>
-        )}
-      </div>
+        <div class="qr-container" id="qrContainer">
+            <div id="qrcode"></div>
+            <div class="qr-info" id="qrInfo"></div>
+        </div>
     </div>
-  );
-}
+
+    <script>
+        let qrcodeInstance = null;
+
+        function setAmount(value) {
+            document.getElementById('amount').value = value;
+        }
+
+        function crc16(data) {
+            let crc = 0xFFFF;
+            for (let i = 0; i < data.length; i++) {
+                crc ^= data.charCodeAt(i) << 8;
+                for (let j = 0; j < 8; j++) {
+                    if (crc & 0x8000) {
+                        crc = (crc << 1) ^ 0x1021;
+                    } else {
+                        crc = crc << 1;
+                    }
+                }
+            }
+            crc &= 0xFFFF;
+            return crc.toString(16).toUpperCase().padStart(4, '0');
+        }
+
+        function generatePromptPayQR(accountNumber, amount = null) {
+            // Format account number
+            let formattedAccount = accountNumber.replace(/\D/g, '');
+            
+            // Build EMV QR Code
+            let qrData = '';
+            qrData += '000201'; // Payload Format Indicator
+            qrData += '010212'; // Point of Initiation Method (12 = QR can be used multiple times)
+            
+            // Merchant Account Information
+            let merchantInfo = '';
+            merchantInfo += '0016' + 'A000000677010111'; // AID
+            merchantInfo += '01' + (formattedAccount.length < 10 ? '13' : '15');
+            merchantInfo += '00' + formattedAccount.length + formattedAccount;
+            
+            qrData += '29' + merchantInfo.length.toString().padStart(2, '0') + merchantInfo;
+            
+            qrData += '5802TH'; // Country Code
+            
+            // Transaction Amount
+            if (amount && amount > 0) {
+                let amountStr = parseFloat(amount).toFixed(2);
+                qrData += '54' + amountStr.length.toString().padStart(2, '0') + amountStr;
+            }
+            
+            qrData += '6304'; // CRC placeholder
+            
+            // Calculate and append CRC
+            let checksum = crc16(qrData);
+            qrData += checksum;
+            
+            return qrData;
+        }
+
+        function generateQR() {
+            const accountType = document.getElementById('accountType').value;
+            const accountNumber = document.getElementById('accountNumber').value.trim();
+            const amount = parseFloat(document.getElementById('amount').value);
+            const errorDiv = document.getElementById('error');
+            
+            // Validation
+            errorDiv.style.display = 'none';
+            
+            if (!accountNumber) {
+                errorDiv.textContent = 'กรุณากรอกหมายเลขบัญชี';
+                errorDiv.style.display = 'block';
+                return;
+            }
+
+            const cleanNumber = accountNumber.replace(/\D/g, '');
+            
+            if (accountType === 'phone' && cleanNumber.length !== 10) {
+                errorDiv.textContent = 'เบอร์โทรศัพท์ต้องมี 10 หลัก';
+                errorDiv.style.display = 'block';
+                return;
+            }
+            
+            if (accountType === 'id' && cleanNumber.length !== 13) {
+                errorDiv.textContent = 'เลขบัตรประชาชนต้องมี 13 หลัก';
+                errorDiv.style.display = 'block';
+                return;
+            }
+
+            if (amount && (amount <= 0 || isNaN(amount))) {
+                errorDiv.textContent = 'จำนวนเงินไม่ถูกต้อง';
+                errorDiv.style.display = 'block';
+                return;
+            }
+
+            // Generate PromptPay QR
+            const qrString = generatePromptPayQR(cleanNumber, amount);
+            
+            // Clear previous QR code
+            const qrcodeDiv = document.getElementById('qrcode');
+            qrcodeDiv.innerHTML = '';
+            
+            // Generate new QR code
+            new QRCode(qrcodeDiv, {
+                text: qrString,
+                width: 250,
+                height: 250,
+                colorDark: '#000000',
+                colorLight: '#ffffff',
+                correctLevel: QRCode.CorrectLevel.L
+            });
+            
+            // Show QR container
+            const qrContainer = document.getElementById('qrContainer');
+            qrContainer.style.display = 'block';
+            
+            // Update info
+            const qrInfo = document.getElementById('qrInfo');
+            const accountTypeText = accountType === 'phone' ? 'เบอร์โทรศัพท์' : 'เลขบัตรประชาชน';
+            const maskedNumber = accountType === 'phone' 
+                ? cleanNumber.substring(0, 3) + 'xxx' + cleanNumber.substring(6)
+                : cleanNumber.substring(0, 1) + 'xxxx' + cleanNumber.substring(5, 8) + 'xxxxx' + cleanNumber.substring(12);
+            
+            qrInfo.innerHTML = `
+                <p><strong>ประเภท:</strong> ${accountTypeText}</p>
+                <p><strong>หมายเลข:</strong> ${maskedNumber}</p>
+                ${amount ? `<p><strong>จำนวนเงิน:</strong> ${amount.toLocaleString('th-TH', {minimumFractionDigits: 2, maximumFractionDigits: 2})} บาท</p>` : '<p><strong>จำนวนเงิน:</strong> ไม่ระบุ (ผู้จ่ายกรอกเอง)</p>'}
+            `;
+            
+            // Scroll to QR code
+            qrContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+
+        // Allow Enter key to generate QR
+        document.getElementById('accountNumber').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') generateQR();
+        });
+        
+        document.getElementById('amount').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') generateQR();
+        });
+    </script>
+</body>
+</html>

@@ -155,11 +155,26 @@
         }
 
         #qrcode {
-            display: inline-block;
+            display: flex;
+            justify-content: center;
+            align-items: center;
             padding: 20px;
             background: white;
             border-radius: 15px;
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            max-width: 100%;
+        }
+
+        #qrcode img {
+            max-width: 100% !important;
+            height: auto !important;
+            width: 100% !important;
+        }
+
+        #qrcode canvas {
+            max-width: 100% !important;
+            height: auto !important;
+            width: 100% !important;
         }
 
         .qr-info {
